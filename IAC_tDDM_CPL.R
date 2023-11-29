@@ -54,10 +54,12 @@ dataBeh$logRT = log(dataBeh$rt) / 1000 # ms to sec
 
 # assign negative RTs to non-chosen option
 dataBeh$RTddm = dataBeh$rt
+
+# re-code this for unhealthy choices
 dataBeh <- dataBeh %>% 
     mutate(
-        RTddm = if_else(sub_healthy_choice == "healthy", 1, -1),
-        choseL = if_else(sub_healthy_choice == "healthy", 1, 0) # choose healthy
+        RTddm = if_else(sub_healthy_choice == "unhealthy", 1, -1),
+        choseL = if_else(sub_healthy_choice == "unhealthy", 1, 0) # choose healthy
     )
 ntrials = length(dataBeh$rt)
 
