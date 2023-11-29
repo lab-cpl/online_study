@@ -46,20 +46,22 @@ dataBeh <- read_csv("final_dataset_filtered.csv") %>%
     mutate(
         label = paste(ID, context, sep = "_"),
         subID = as.numeric(as.factor(label)),
+        rt = rt / 1000 # use second instead of ms
     )
 
 dataBeh$abstd = abs(dataBeh$td)
 dataBeh$abshd = abs(dataBeh$hd)
-dataBeh$logRT = log(dataBeh$rt) / 1000 # ms to sec
+dataBeh$logRT = log(dataBeh$rt)
 
 # assign negative RTs to non-chosen option
-dataBeh$RTddm = dataBeh$rt
-
-# re-code this for unhealthy choices
+# in this case hd a vd were computed as the difference between the healthy
+# option and the unhealthy option, taking the signed difference
+# if subject chooses unhealthy option, then RT is coded as negative
+# this is relevant for the likelihood computations
 dataBeh <- dataBeh %>% 
     mutate(
-        RTddm = if_else(sub_healthy_choice == "unhealthy", 1, -1),
-        choseL = if_else(sub_healthy_choice == "unhealthy", 1, 0) # choose healthy
+        choseL = if_else(sub_healthy_choice == "healthy", 1, 0),
+        RTddm = if_else(choseL == 0, rt * -1, rt) # if unhealthy is choosen then rt is negative
     )
 ntrials = length(dataBeh$rt)
 
@@ -67,9 +69,16 @@ ntrials = length(dataBeh$rt)
 # based on xpos, we can see the size of the time bins
 # if you want to adjust the bins, change the sequence length (-5,5) or 
 # length.out, which tells you how many divisions are put into the sequence
-xpos = seq(-5,5,length.out=1024)
+
+# just to make sure, plot the RT distributions (with positive and negative sign)
+hist(dataBeh$RTddm)  # ~-4 to 4 with significant number of observations
+range(dataBeh$RTddm) # -4.5 to 4.6
+
+xpos = seq(-5,5,length.out=1024) # this is then OK
 dt = xpos[2] - xpos[1]
 dataBeh$RTddm_pos = 0
+
+# gets the probability within the pdf
 for (i in 1:ntrials) {
 	dataBeh$RTddm_pos[i] = which.min(abs(xpos - dataBeh$RTddm[i]))
 }
@@ -93,6 +102,7 @@ ll_ddm2 <- function(x, dataBeh2, vd, hd) {
     rts = rts[rts!=0]
     xdens = density(rts, from=-5, to=5, n=1024, bw=0.11) #matches the prob. space of RTs from above
     idx = which(dataBeh2$td==vd[i] & dataBeh2$hd==hd[i])
+    # this is a vector of probabilities for all trial with same taste and health difference
     probs = c(probs, dt*xdens$y[dataBeh2$RTddm_pos[idx]])
   }
   
