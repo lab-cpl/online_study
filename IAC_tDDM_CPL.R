@@ -37,7 +37,10 @@ RcppParallel::setThreadOptions(numThreads = 1) #this is critical for running on 
 sourceCpp("tSSM_Rcpp.cpp")
 
 # read in behavioral data from HEALTH cue only
-dataBeh <- read_csv("final_dataset_filtered.csv") %>% 
+# this csv contains health and taste difference computed as healthy option - unhealthy options
+# when both options were rated equally they were removed
+# healthy option is the one with highest health rating
+dataBeh <- read_csv("filtered_data_for_DDM_with_health_as_reference.csv") %>% 
     dplyr::rename(
         td = dTaste,
         hd = dHealth,
@@ -53,11 +56,7 @@ dataBeh$abstd = abs(dataBeh$td)
 dataBeh$abshd = abs(dataBeh$hd)
 dataBeh$logRT = log(dataBeh$rt)
 
-# assign negative RTs to non-chosen option
-# in this case hd a vd were computed as the difference between the healthy
-# option and the unhealthy option, taking the signed difference
-# if subject chooses unhealthy option, then RT is coded as negative
-# this is relevant for the likelihood computations
+# assign negative RTs to unhealthy option
 dataBeh <- dataBeh %>% 
     mutate(
         choseL = if_else(sub_healthy_choice == "healthy", 1, 0),
@@ -120,10 +119,17 @@ fitSub <- function(s, dataBeh) {
   label <- unique(dataBeh2$label)
   cat(NULL,file=paste0(label, ".csv"))
   
-  data1 = ddply(dataBeh2, .(td, hd), summarize, acc= mean(choseL))
+  #data1 = ddply(dataBeh2, .(td, hd), summarize, acc= mean(choseL))
+  # td and hd were changes to 10 equally spaced bins
+  # this should reduce computation time
+  data1 = ddply(dataBeh2, .(bin_taste, bin_health), summarize, acc= mean(choseL))
   
-  vd = data1$td # value difference for attribute 1 (here: taste)
-  hd = data1$hd # value difference for attribute 2 (here: health)
+  #vd = data1$td # value difference for attribute 1 (here: taste)
+  #hd = data1$hd # value difference for attribute 2 (here: health)
+  
+  # binned differences for taste and health
+  vd = data1$bin_taste
+  hd = data1$bin_health
   
   # boundaries for parameters
   lower <- c(-2,-2,0.6,0.01,-1,-1)
@@ -155,48 +161,3 @@ names(fits)<-c("d_t", "d_h", "thres", "nDT", "timeHin", "bias", "LL", "BIC", "AI
 #will overwrite previous save, but that is intended
 fitsF=fits
 write.csv(fitsF, file = "fits_ddm_nbo.csv")
-
-lower <- c(-2,-2,0.6,0.01,-1,-1)
-upper <- c(2,2,3,1,1,1)
-
-param_bounds <-
-    tibble(
-        lower = lower,
-        upper = upper,
-        param = c("d_t", "d_h", "thres", "nDT", "timeHin", "bias")
-    ) %>% 
-    group_by(param) %>% 
-    group_split() %>% 
-    map_dfr(.,
-        function(x){
-            v <- fits_data %>% 
-                select(x$param) %>% 
-                as_vector()
-            out <-
-                tibble(
-                    parameter = x$param,
-                    subjects_within_boundaries = sum(v<=x$upper & v >= x$lower),
-                    percent = (subjects_within_boundaries / 910) * 100
-                )
-            return(out)
-        })
-param_bounds
-  
-fits_data %>% 
-    filter(d_t >= 0 & d_t <= 3) %>% 
-    ggplot(aes(
-        thres, AIC
-    )) +
-    geom_point()
-  
-  
-# Create plot
-p <- fits_data %>%
-    pivot_longer(cols = d_t:bias) %>%
-    mutate(value = value ^ (1/3)) %>%
-    ggplot(aes(x = value)) +
-    facet_wrap(~ name) +
-    geom_histogram()
-p
-
-# Count number of trials per subject and see correlation with out of bounds
